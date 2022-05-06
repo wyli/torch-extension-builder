@@ -44,7 +44,7 @@ def patch_wheel(wheel_path, output_dir="patched_wheels"):
     # Make substitutions and remove duplicate library...
     substitutes = get_dependancy_substitutes(wheel_dependancies, torch_libraries)
 
-    print("Redirecting dependancies...")
+    print(f"Redirecting dependancies...{work_dir}")
     for original_library, new_library in substitutes:
         original_library_name = os.path.basename(original_library)
         new_library_name = os.path.basename(new_library)
