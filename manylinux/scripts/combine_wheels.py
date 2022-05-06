@@ -3,7 +3,6 @@ import os
 import glob
 import shutil
 import argparse
-from subprocess import check_output
 
 import utils
 
@@ -21,24 +20,26 @@ __bootstrap__()
 
 def wrap_libraries(wheel_dir):
 
-    all_libraries = glob.glob(f"{wheel_dir}/*.so.*")
+    package_name = wheel_dir.split("-")[0]
+    all_libraries = glob.glob(os.path.join(f"{wheel_dir}", f"{package_name}", "**", "*.so.*"), recursive=True)
     library_files = list(set([lib.split("/")[-1].split(".so.")[0] for lib in all_libraries]))
     library_names = [file.split(".")[0] for file in library_files]
 
     for lib_name, lib_file in zip(library_names, library_files):
         wrapper_file_text = IMPORT_WRAPPER_TEMPLATE.format(lib_file)
-        
-        with open(wheel_dir + "/" + lib_name + ".py", "w") as f:
+
+        with open(os.path.join(wheel_dir, package_name, lib_name + ".py"), "w") as f:
             f.write(wrapper_file_text)
 
 def combine_wheels(wheels, output_dir="combined_wheels"):
-    
+
     print("Combining wheels...")
     map(print, wheels)
 
     wheel_file = os.path.basename(wheels[0])
     wheel_name = wheel_file.split(".whl.")[0]
     work_dir = "-".join(wheel_name.split("-")[0:2])
+    package_name = work_dir.split("-")[0]
 
     for wheel in wheels:
         wheel_tag = wheel.split(".whl.")[-1]
@@ -47,9 +48,9 @@ def combine_wheels(wheels, output_dir="combined_wheels"):
         utils.unpack_wheel(f"{wheel_name}.whl")
         os.rename(f"{wheel_name}.whl", wheel)
 
-        for library in glob.glob(f"{work_dir}/*.so"):
+        for library in glob.glob(os.path.join(f"{work_dir}", f"{package_name}", "**", "*.so"), recursive=True):
             os.rename(library, f"{library}.{wheel_tag}")
-    
+
     wrap_libraries(work_dir)
 
     dir_util.mkpath(output_dir)

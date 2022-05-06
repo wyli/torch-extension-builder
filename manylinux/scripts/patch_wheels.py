@@ -21,7 +21,7 @@ def get_dependancy_substitutes(wheel_dependancies, torch_libraries):
     return substitutes
 
 def patch_wheel(wheel_path, output_dir="patched_wheels"):
-    
+
     # Parsing info from wheel path...
     wheel_file = os.path.basename(wheel_path)
     wheel_name = os.path.splitext(wheel_file)[0]
@@ -37,14 +37,16 @@ def patch_wheel(wheel_path, output_dir="patched_wheels"):
     utils.unpack_wheel(wheel_path)
 
     # Finding libraries and dependancies...
-    wheel_libraries = glob.glob(f"{work_dir}/*.so")
+    wheel_libraries = glob.glob(os.path.join(f"{work_dir}", f"{package_name}", "**", "*.so"), recursive=True)
+    if not wheel_libraries:
+        print(f"no '.so' library found in {work_dir}.")
     wheel_dependancies = glob.glob(f"{work_dir}/{package_name}.libs/*.so*")
     torch_libraries = glob.glob(os.path.join(os.path.dirname(torch.__file__), "lib", "*.so*"))
 
     # Make substitutions and remove duplicate library...
     substitutes = get_dependancy_substitutes(wheel_dependancies, torch_libraries)
 
-    print("Redirecting dependancies...")
+    print(f"Redirecting dependancies...{work_dir}")
     for original_library, new_library in substitutes:
         original_library_name = os.path.basename(original_library)
         new_library_name = os.path.basename(new_library)
@@ -55,7 +57,7 @@ def patch_wheel(wheel_path, output_dir="patched_wheels"):
 
     # Add torch/lib path to rpath...
     for wheel_library in wheel_libraries:
-        utils.write_rpath(wheel_library, f"$ORIGIN/{package_name}.libs:$ORIGIN/torch/lib")
+        utils.write_rpath(wheel_library, f"$ORIGIN/../{package_name}.libs:$ORIGIN/../torch/lib")
 
     # Repack wheel and remove temporary directory...
     utils.pack_wheel(work_dir, output_dir)

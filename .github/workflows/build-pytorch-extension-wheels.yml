@@ -5,7 +5,7 @@ on:
     inputs:
       working-directory:
         type: string
-        default: "."
+        default: "package_root"
       build-command:
         type: string
         default: "python setup.py bdist_wheel"
@@ -40,7 +40,7 @@ jobs:
 
           LOGS_REQUEST=$REQUEST_BASE/jobs/${JOB_IDS[0]}/logs
           LOGS=$(curl -s -u $AUTH -H $HEADER $LOGS_REQUEST -L --output -)
-          TAG=$(echo "$LOGS" | grep "Job defined at: charliebudd/torch-extension-builder/.github/workflows/build-pytorch-extension-wheels.yml@" | grep -v "grep" | sed 's:.*/::' | tr -d '[:space:]')
+          TAG=$(echo "$LOGS" | grep "Job defined at: wyli/torch-extension-builder/.github/workflows/build-pytorch-extension-wheels.yml@" | grep -v "grep" | sed 's:.*/::' | tr -d '[:space:]')
 
           echo "Tag: $TAG"
 
@@ -54,7 +54,7 @@ jobs:
     name: Build Wheels
     needs: setup
     runs-on: ubuntu-latest
-    container: 
+    container:
       image: docker://torchextensionbuilder/manylinux:py${{ matrix.python-version }}-pt${{ matrix.pytorch-version }}-cu${{ matrix.cuda-version }}${{needs.setup.outputs.image-tag}}
     strategy:
       fail-fast: false
@@ -64,24 +64,43 @@ jobs:
         cuda-version: ${{ fromJson(inputs.cuda-versions) }}
         exclude:
           - pytorch-version: 1.9
-            cuda-version: 11.3 
+            cuda-version: 11.3
           - python-version: 3.6
             pytorch-version: 1.11
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          path: package_root
+          fetch-depth: 0
+
+      - name: Checkout Scripts
+        uses: actions/checkout@v3
+        with:
+          repository: wyli/torch-extension-builder
+          ref: test-branch
+          path: torch-extension-builder
 
       - name: Build Wheels
         working-directory: ${{ inputs.working-directory }}
-        run: ${{ inputs.build-command }}
-        
+        run: |
+          # verify that directory structure is:
+          #   - $GITHUB_WORKSPACE/package_root
+          #   - $GITHUB_WORKSPACE/torch-extension-builder
+          # and currently at `$GITHUB_WORKSPACE/package_root` (if with default inputs.working-directory)
+          ls $GITHUB_WORKSPACE;pwd;ls
+          # install git
+          git status
+          # run the build command
+          ${{ inputs.build-command }}
+
       - name: Repair Wheels
         working-directory: ${{ inputs.working-directory }}
         run: auditwheel repair dist/*.whl --plat manylinux_2_17_x86_64 --only-plat
-        
+
       - name: Patch Wheels
         working-directory: ${{ inputs.working-directory }}
-        run: python /torch_extension_builder/patch_wheels.py wheelhouse/*manylinux*.whl
+        run: python $GITHUB_WORKSPACE/torch-extension-builder/manylinux/scripts/patch_wheels.py wheelhouse/*manylinux*.whl
 
       - name: Cache Patched Wheels
         uses: actions/upload-artifact@v3
@@ -89,14 +108,14 @@ jobs:
           path: ${{ inputs.working-directory }}/patched_wheels
           name: py${{ matrix.python-version }}-wheels
           retention-days: 1
-          
+
       - name: Cache Script
         uses: actions/upload-artifact@v3
         with:
-          path: /torch_extension_builder
+          path: ${{ github.workspace }}/torch-extension-builder/manylinux/scripts/*.py
           name: scripts
           retention-days: 1
-  
+
   combine-wheels:
     name: Combine Wheels
     needs: build-wheels
@@ -112,7 +131,7 @@ jobs:
         with:
           name: py${{ matrix.python-version }}-wheels
           path: patched_wheels
-        
+
       - name: Download Script
         uses: actions/download-artifact@v3
         with:
@@ -120,7 +139,7 @@ jobs:
 
       - name: Combine Wheels
         run: python combine_wheels.py patched_wheels/*
-        
+
       - name: Cache Final Wheels
         uses: actions/upload-artifact@v3
         with:
